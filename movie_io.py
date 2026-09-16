@@ -1,5 +1,6 @@
 """Movie input shared by inference discovery and preprocessing (T, Y, X)."""
 import os
+import tempfile
 
 import numpy as np
 import tifffile as tiff
@@ -27,11 +28,65 @@ def list_movie_files(input_path):
     files = sorted(
         os.path.join(input_path, name) for name in os.listdir(input_path)
         if name.lower().endswith(MOVIE_SUFFIXES)
+        and not os.path.splitext(name)[0].lower().endswith('_denosied')
+        and '_denosied_' not in os.path.splitext(name)[0].lower()
         and os.path.isfile(os.path.join(input_path, name))
     )
     if not files:
         raise ValueError('No TIFF or H5 movies found in {}'.format(input_path))
     return files
+
+
+def movie_output_path(input_path, output_path=None, model_name=None):
+    """Keep the source extension and default to the source directory."""
+    stem, extension = os.path.splitext(os.path.basename(input_path))
+    if extension.lower() not in MOVIE_SUFFIXES:
+        raise ValueError('Unsupported movie format: {}'.format(input_path))
+    directory = output_path or os.path.dirname(input_path) or '.'
+    suffix = '_denosied'
+    if model_name:
+        model_label = os.path.basename(os.path.normpath(model_name))
+        if model_label.lower().endswith('.pth'):
+            model_label = os.path.splitext(model_label)[0]
+        suffix += '_' + model_label
+    return os.path.join(directory, stem + suffix + extension)
+
+
+def write_movie(path, movie):
+    """Save a TYX movie as TIFF or H5, replacing the result after a full write."""
+    if movie.ndim != 3 or any(size == 0 for size in movie.shape):
+        raise ValueError('Output must be a nonempty grayscale movie (T, Y, X)')
+    extension = os.path.splitext(path)[1].lower()
+    if extension not in MOVIE_SUFFIXES:
+        raise ValueError('Unsupported movie format: {}'.format(path))
+    directory = os.path.dirname(path) or '.'
+    os.makedirs(directory, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(prefix='.srdtrans_', suffix=extension, dir=directory)
+    os.close(descriptor)
+    try:
+        if extension in ('.h5', '.hdf5'):
+            import h5py
+            try:
+                import hdf5plugin
+            except ImportError as exc:
+                raise ImportError('H5 Zstd output requires hdf5plugin in your Python environment.') from exc
+            with h5py.File(temporary, 'w') as handle:
+                dataset = handle.create_dataset(
+                    'images', data=movie, shuffle=True, **hdf5plugin.Zstd(clevel=3),
+                    chunks=(1, min(movie.shape[1], 256), min(movie.shape[2], 256)))
+                dataset.attrs['axis_order'] = 'tyx'
+        else:
+            with tiff.TiffWriter(temporary, bigtiff=movie.nbytes >= 2**32 - 2**25) as writer:
+                options = dict(photometric='minisblack', metadata={'axes': 'TYX'})
+                if hasattr(writer, 'write'):
+                    writer.write(movie, compression='deflate', **options)
+                else:
+                    # tifffile 2020 uses compress rather than compression.
+                    writer.save(movie, compress=('ADOBE_DEFLATE', 6), **options)
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.remove(temporary)
 
 
 def read_movie(path, h5_dataset=None, h5_axis_order='tyx', frame_limit=None):
@@ -43,6 +98,11 @@ def read_movie(path, h5_dataset=None, h5_axis_order='tyx', frame_limit=None):
             import h5py
         except ImportError as exc:
             raise ImportError('H5 input requires h5py; install it in your Python environment.') from exc
+        # Register Zstd and other plugin filters before reading compressed inputs.
+        try:
+            import hdf5plugin
+        except ImportError:
+            pass  # Ordinary H5 inputs do not require external compression filters.
         order = h5_axis_order.lower()
         if len(order) != 3 or set(order) != set('tyx'):
             raise ValueError('h5_axis_order must be a permutation of tyx')

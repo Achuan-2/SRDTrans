@@ -15,7 +15,7 @@ train.py 自监督训练
         ↓
 test.py 分块去噪并拼接
         ↓
-结果保存在 results/
+结果默认保存在输入文件同目录，格式与输入一致
 ```
 
 ## 1. 当前电脑上的运行环境
@@ -172,24 +172,27 @@ python test.py \
 - 建议先让 `patch_x` 也与训练时一致；显存不足时可尝试减小 `patch_x`。
 - 如果模型文件夹内有多个 `.pth`，程序只会使用按文件名排序后的最后一个，通常就是最后一个 epoch。
 
-结果目录类似：
+默认结果保存到每个输入文件所在目录。例如：
 
 ```text
-results/
-└── DataFolderIs_my_data_<时间>_ModelFolderIs_my_data_202609151230/
-    ├── para.yaml
-    └── E_20_Iter_XXXX/
-        ├── stack_01_E_20_Iter_XXXX_output.tif
-        └── stack_02_E_20_Iter_XXXX_output.tif
+datasets/my_data/
+├── stack_01.tif
+├── stack_01_denosied_PFC.tif
+├── stack_01_denosied_PFC.yaml
+├── stack_02.tif
+├── stack_02_denosied_PFC.tif
+└── stack_02_denosied_PFC.yaml
 ```
 
 输出会尽量沿用输入数据类型：`uint16` 输入输出为 `uint16`，`int16` 输入输出为 `int16`，其他类型最终保存为 `int32`。
+
+`--output_path "D:\降噪结果"` 可指定输出目录，程序直接在该目录生成结果，不再创建时间或模型子目录。不填写或填写空值时，结果与源文件同目录。输出文件保留输入扩展名，并添加 `_denosied_<模型文件名>` 后缀（按约定使用此拼写）。模型名取实际加载的 `.pth` 权重文件名，去掉扩展名；例如使用 `PFC.pth` 时生成 `stack_01_denosied_PFC.tif`。同一个输入使用不同模型时分别保存结果；重复使用同一模型会替换同名结果。目录批处理会跳过已有的 `*_denosied` 和 `*_denosied_<模型名>` 图像文件。
 
 ### 直接读取 H5 或外部文件
 
 `test.py` 支持 `.tif`、`.tiff`、`.h5`、`.hdf5`，`--datasets_path` 可直接填写单个文件或图像目录。此时可以省略 `--datasets_folder`；原来的“根目录 + 子文件夹”参数写法也继续支持。`train.py` 仍只支持 TIFF。
 
-H5 输入需要在运行环境安装 `h5py`。本机旧的 Python 3.6 环境可使用 `python -m pip install h5py==3.1.0`；现代 Python 环境可使用 `uv pip install h5py`。
+H5 读写使用 `h5py`，Zstd 压缩还需要 `hdf5plugin`。本机旧的 Python 3.6 环境可使用 `python -m pip install h5py==3.1.0 hdf5plugin==3.3.1`；现代 Python 环境可使用 `uv pip install h5py hdf5plugin`。本程序在读取 H5 时自动注册压缩过滤器；其他程序读取 Zstd H5 时也需要支持该过滤器，例如 Python 中先执行 `import hdf5plugin`。
 
 例如，直接处理 CAPilot 导出的 H5：
 
@@ -199,7 +202,7 @@ python test.py --datasets_path "E:\Wokspace\CAPilot workspace\data\3_信号提�
 
 H5 自动优先选择 `/images`、`/data`、`/mov`；没有这些名称时，选择唯一的三维数值数据集。其他情况需通过 `--h5_dataset "/group/movie"` 指定。默认存储顺序为 `(T, Y, X)`，其他顺序可通过 `--h5_axis_order yxt` 等参数指定，读取后统一转换为 `(T, Y, X)`。程序不根据维度大小猜测轴顺序。
 
-`--test_datasize 64` 可限制实际读取的 H5 帧数，必须不少于 `patch_t`。推理仍将选取的图像数据及拼接结果存入内存，并非全程流式处理。输出沿用现有流程，保存为 `*_output.tif`，不会修改源 H5 文件。
+`--test_datasize 64` 可限制实际读取的 H5 帧数，必须不少于 `patch_t`。推理仍将选取的图像数据及拼接结果存入内存，并非全程流式处理。TIFF 输入输出 TIFF，H5 输入输出 H5。例如使用 `PFC.pth` 处理 `movie_export_f1-1000.h5`，默认在同目录生成 `movie_export_f1-1000_denosied_PFC.h5`，源文件保持不变。TIFF 输出默认使用 Deflate 无损压缩。H5 输出在 `/images` 保存降噪图像，维度统一为 `(T, Y, X)`，默认使用 Zstd level 3 无损压缩，并设置 `shuffle=True`；输出不复制源 H5 的其他数据集或属性。每个结果旁还保存同名 `.yaml` 推理参数。
 
 ## 6. 使用预训练模型
 

@@ -1,5 +1,7 @@
 import os
 import tempfile
+import subprocess
+import sys
 import unittest
 from types import SimpleNamespace
 
@@ -7,7 +9,7 @@ import h5py
 import numpy as np
 import tifffile
 
-from movie_io import list_movie_files, read_movie, resolve_input_path
+from movie_io import list_movie_files, read_movie, resolve_input_path, movie_output_path, write_movie
 from data_process import test_preprocess_lessMemoryNoTail_chooseOne
 
 
@@ -82,6 +84,68 @@ class MovieInputTests(unittest.TestCase):
         self.assertEqual(h5_result[3:], tif_result[3:])
         self.assertEqual(h5_result[1].shape, (6, 10, 12))
         self.assertTrue(h5_result[0])
+
+    def test_output_location_and_format_roundtrip(self):
+        for extension in ('.tif', '.tiff', '.h5', '.hdf5'):
+            source = os.path.join(self.temp.name, 'movie' + extension)
+            result = movie_output_path(source)
+            self.assertEqual(result, os.path.join(self.temp.name, 'movie_denosied' + extension))
+            self.assertEqual(movie_output_path(source, ''), result)
+            write_movie(result, self.movie)
+            np.testing.assert_array_equal(read_movie(result), self.movie)
+            self.assertEqual(read_movie(result).dtype, self.movie.dtype)
+            custom_dir = os.path.join(self.temp.name, 'custom', 'nested')
+            custom = movie_output_path(source, custom_dir)
+            self.assertEqual(custom, os.path.join(custom_dir, 'movie_denosied' + extension))
+            write_movie(custom, self.movie + 1)
+            np.testing.assert_array_equal(read_movie(custom), self.movie + 1)
+            write_movie(custom, self.movie)
+            np.testing.assert_array_equal(read_movie(custom), self.movie)
+        self.assertFalse(any(name.startswith('.srdtrans_') for name in os.listdir(self.temp.name)))
+
+    def test_batch_skips_previous_outputs(self):
+        source = self.save_h5()
+        result = movie_output_path(source)
+        write_movie(result, self.movie)
+        model_result = movie_output_path(source, model_name='PFC.pth')
+        write_movie(model_result, self.movie)
+        self.assertEqual(list_movie_files(self.temp.name), [source])
+        self.assertEqual(list_movie_files(result), [result])
+
+    def test_output_uses_model_filename(self):
+        for extension in ('.tif', '.tiff', '.h5', '.hdf5'):
+            source = os.path.join(self.temp.name, 'movie' + extension)
+            expected = os.path.join(self.temp.name, 'movie_denosied_PFC' + extension)
+            self.assertEqual(movie_output_path(source, model_name='PFC.pth'), expected)
+            self.assertEqual(movie_output_path(source, model_name='PFC'), expected)
+            self.assertEqual(movie_output_path(source, model_name=os.path.join('pth', 'PFC.pth')), expected)
+            self.assertNotEqual(expected, movie_output_path(source, model_name='HPC.pth'))
+
+    def test_output_compression_filters(self):
+        for extension in ('.tif', '.tiff'):
+            path = os.path.join(self.temp.name, 'compressed' + extension)
+            write_movie(path, self.movie)
+            with tifffile.TiffFile(path) as handle:
+                self.assertTrue(all(int(page.compression) in (8, 32946) for page in handle.pages))
+            np.testing.assert_array_equal(read_movie(path), self.movie)
+        path = os.path.join(self.temp.name, 'compressed.h5')
+        write_movie(path, self.movie)
+        with h5py.File(path, 'r') as handle:
+            dataset = handle['images']
+            self.assertTrue(dataset.shuffle)
+            filters = dataset.id.get_create_plist()
+            self.assertEqual(filters.get_nfilters(), 2)
+            self.assertEqual(filters.get_filter(0)[0], h5py.h5z.FILTER_SHUFFLE)
+            self.assertEqual(filters.get_filter(1)[0], 32015)
+            self.assertEqual(filters.get_filter(1)[2], (3,))
+            np.testing.assert_array_equal(dataset[:], self.movie)
+        # A fresh process must also register the Zstd filter on the read path.
+        subprocess.check_call([
+            sys.executable, '-c',
+            'import sys; import numpy as np; from movie_io import read_movie; '
+            'np.testing.assert_array_equal(read_movie(sys.argv[1]), '
+            'np.arange(8*10*12,dtype=np.uint16).reshape(8,10,12))', path
+        ], cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 if __name__ == '__main__':
