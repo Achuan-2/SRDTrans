@@ -130,7 +130,7 @@ def test():
                 prev_time = time.time()
                 time_start = time.time()
                 denoise_img = np.zeros(noise_img.shape)
-                result_name = movie_output_path(opt.movie_files[N], opt.output_path, pth_name)
+                result_name = movie_output_path(opt.movie_files[N], opt.output_path, opt.denoise_model)
                 print(os.getcwd())
                 print(result_name)
 

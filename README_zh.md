@@ -186,7 +186,7 @@ datasets/my_data/
 
 输出会尽量沿用输入数据类型：`uint16` 输入输出为 `uint16`，`int16` 输入输出为 `int16`，其他类型最终保存为 `int32`。
 
-`--output_path "D:\降噪结果"` 可指定输出目录，程序直接在该目录生成结果，不再创建时间或模型子目录。不填写或填写空值时，结果与源文件同目录。输出文件保留输入扩展名，并添加 `_denosied_<模型文件名>` 后缀（按约定使用此拼写）。模型名取实际加载的 `.pth` 权重文件名，去掉扩展名；例如使用 `PFC.pth` 时生成 `stack_01_denosied_PFC.tif`。同一个输入使用不同模型时分别保存结果；重复使用同一模型会替换同名结果。目录批处理会跳过已有的 `*_denosied` 和 `*_denosied_<模型名>` 图像文件。
+`--output_path "D:\降噪结果"` 可指定输出目录，程序直接在该目录生成结果，不再创建时间或模型子目录。不填写或填写空值时，结果与源文件同目录。输出文件保留输入扩展名，并添加 `_denosied_<模型名>` 后缀（按约定使用此拼写）。模型名取 `--denoise_model` 指定的模型文件夹名称；例如 `--denoise_model cad_03hz` 生成 `stack_01_denosied_cad_03hz.tif`。同一个输入使用不同模型时分别保存结果；重复使用同一模型会替换同名结果。目录批处理会跳过已有的 `*_denosied` 和 `*_denosied_<模型名>` 图像文件。
 
 ### 直接读取 H5 或外部文件
 
@@ -202,7 +202,7 @@ python test.py --datasets_path "E:\Wokspace\CAPilot workspace\data\3_信号提�
 
 H5 自动优先选择 `/images`、`/data`、`/mov`；没有这些名称时，选择唯一的三维数值数据集。其他情况需通过 `--h5_dataset "/group/movie"` 指定。默认存储顺序为 `(T, Y, X)`，其他顺序可通过 `--h5_axis_order yxt` 等参数指定，读取后统一转换为 `(T, Y, X)`。程序不根据维度大小猜测轴顺序。
 
-`--test_datasize 64` 可限制实际读取的 H5 帧数，必须不少于 `patch_t`。推理仍将选取的图像数据及拼接结果存入内存，并非全程流式处理。TIFF 输入输出 TIFF，H5 输入输出 H5。例如使用 `PFC.pth` 处理 `movie_export_f1-1000.h5`，默认在同目录生成 `movie_export_f1-1000_denosied_PFC.h5`，源文件保持不变。TIFF 输出默认使用 Deflate 无损压缩。H5 输出在 `/images` 保存降噪图像，维度统一为 `(T, Y, X)`，默认使用 Zstd level 3 无损压缩，并设置 `shuffle=True`；输出不复制源 H5 的其他数据集或属性。每个结果旁还保存同名 `.yaml` 推理参数。
+`--test_datasize 64` 可限制实际读取的 H5 帧数，必须不少于 `patch_t`。推理仍将选取的图像数据及拼接结果存入内存，并非全程流式处理。TIFF 输入输出 TIFF，H5 输入输出 H5。例如使用 `--denoise_model cad_03hz` 处理 `movie_export_f1-1000.h5`，默认在同目录生成 `movie_export_f1-1000_denosied_cad_03hz.h5`，源文件保持不变。TIFF 输出默认使用 Deflate 无损压缩。H5 输出在 `/images` 保存降噪图像，维度统一为 `(T, Y, X)`，默认使用 Zstd level 3 无损压缩，并设置 `shuffle=True`；输出不复制源 H5 的其他数据集或属性。每个结果旁还保存同名 `.yaml` 推理参数。
 
 ## 6. 使用预训练模型
 
@@ -223,10 +223,10 @@ python test.py \
   --denoise_model cad_03hz \
   --GPU 0 \
   --patch_x 64 \
-  --patch_t 160
+  --patch_t 128
 ```
 
-预训练模型的 `patch_t` 要使用发布该模型时的训练值。原 README 的预训练模型示例为 `patch_t=160`。在本机 6 GB 显存上，可以先将空间补丁 `patch_x` 降到 64；已验证 `patch_t=160、patch_x=64` 的单次 GPU 前向计算可以运行。
+预训练模型的 `patch_t` 必须与实际权重匹配。本地 `cad_03hz/Pretrained_0.3Hz_50mWpower_1000frames.pth` 的时间位置编码长度为 8，当前模型在时间方向缩小 16 倍，因此应使用 `patch_t=128`。若使用 160，加载时会报位置编码 `[1, 8, 128]` 与 `[1, 10, 128]` 不匹配。在本机 6 GB 显存上，空间补丁可设为 `patch_x=64`。
 
 ## 7. 常见问题
 

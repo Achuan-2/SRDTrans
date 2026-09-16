@@ -112,7 +112,7 @@ class MovieInputTests(unittest.TestCase):
         self.assertEqual(list_movie_files(self.temp.name), [source])
         self.assertEqual(list_movie_files(result), [result])
 
-    def test_output_uses_model_filename(self):
+    def test_output_uses_model_name(self):
         for extension in ('.tif', '.tiff', '.h5', '.hdf5'):
             source = os.path.join(self.temp.name, 'movie' + extension)
             expected = os.path.join(self.temp.name, 'movie_denosied_PFC' + extension)
@@ -120,6 +120,10 @@ class MovieInputTests(unittest.TestCase):
             self.assertEqual(movie_output_path(source, model_name='PFC'), expected)
             self.assertEqual(movie_output_path(source, model_name=os.path.join('pth', 'PFC.pth')), expected)
             self.assertNotEqual(expected, movie_output_path(source, model_name='HPC.pth'))
+            self.assertEqual(
+                movie_output_path(source, model_name='cad_03hz'),
+                os.path.join(self.temp.name, 'movie_denosied_cad_03hz' + extension)
+            )
 
     def test_output_compression_filters(self):
         for extension in ('.tif', '.tiff'):
