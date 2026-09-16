@@ -344,6 +344,22 @@ def test_preprocess_lessMemoryNoTail_chooseOne (args, N):
 
     im_dir = os.path.join(im_folder, im_name)
     noise_im = tiff.imread(im_dir)
+
+    # Some exporters store each grayscale frame as a separate TIFF series.
+    # imread defaults to the first series, which is only a 2D frame in that case.
+    if noise_im.ndim == 2:
+        with tiff.TiffFile(im_dir) as tif:
+            if len(tif.pages) > 1 and all(
+                page.shape == noise_im.shape and page.samplesperpixel == 1
+                and page.dtype == noise_im.dtype for page in tif.pages
+            ):
+                noise_im = tif.asarray(key=range(len(tif.pages)))
+
+    if noise_im.ndim != 3:
+        raise ValueError(
+            "Expected a grayscale TIFF stack with shape (T, Y, X), "
+            "but {} has shape {}".format(im_dir, noise_im.shape)
+        )
     
     input_data_type = noise_im.dtype
     img_mean = noise_im.mean()
@@ -357,6 +373,13 @@ def test_preprocess_lessMemoryNoTail_chooseOne (args, N):
     whole_x = noise_im.shape[2]
     whole_y = noise_im.shape[1]
     whole_t = noise_im.shape[0]
+
+    if whole_x < patch_x or whole_y < patch_y or whole_t < patch_t2:
+        raise ValueError(
+            "TIFF stack {} has shape {}, smaller than patch shape {}".format(
+                im_dir, noise_im.shape, (patch_t2, patch_y, patch_x)
+            )
+        )
 
     num_w = math.ceil((whole_x-patch_x+gap_x)/gap_x)
     num_h = math.ceil((whole_y-patch_y+gap_y)/gap_y)
