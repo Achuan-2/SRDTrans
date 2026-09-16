@@ -38,6 +38,7 @@ parser.add_argument("--b2", type=float, default=0.999, help="Adam: bata2")
 parser.add_argument('--select_img_num', type=int, default=10000000000, help='How many frames will be used for training.')
 parser.add_argument('--test_datasize', type=int, default=10000000000, help='How many frames will be tested.')
 parser.add_argument('--scale_factor', type=int, default=1, help='the factor for image intensity scaling')
+parser.add_argument('--num_workers', type=int, default=0, help='number of workers for dataloader')
 opt = parser.parse_args()
 os.environ["CUDA_VISIBLE_DEVICES"] = opt.GPU
 
@@ -116,11 +117,9 @@ prev_time = time.time()
 time_start=time.time()
 
 # start training
-def train_epoch():
+def train_epoch(epoch, trainloader):
     global prev_time
     denoise_generator.train()
-    train_data = trainset(train_name_list, train_coordinate_list, train_noise_img, stack_index)
-    trainloader = DataLoader(train_data, batch_size=opt.batch_size, shuffle=True, num_workers=4)
 
     for iteration, noisy in enumerate(trainloader):
 
@@ -160,10 +159,10 @@ def train_epoch():
                     Total_loss.item(),
                     time_left,
                     time_end - time_start
-                ), end=' ')
+                ), end='', flush=True)
 
         if (iteration + 1) % len(trainloader) == 0:
-            print('\n', end=' ')
+            print('', flush=True)
 
         ################################################################################################################
         # save model
@@ -174,7 +173,11 @@ def train_epoch():
                 torch.save(denoise_generator.module.state_dict(), model_save_name)  # parallel
             else:
                 torch.save(denoise_generator.state_dict(), model_save_name)  # not parallel
+            print('Saved model to: %s' % model_save_name, flush=True)
 
 
-for epoch in range(0, opt.n_epochs):
-    train_epoch()
+if __name__ == '__main__':
+    train_data = trainset(train_name_list, train_coordinate_list, train_noise_img, stack_index)
+    trainloader = DataLoader(train_data, batch_size=opt.batch_size, shuffle=True, num_workers=opt.num_workers)
+    for epoch in range(0, opt.n_epochs):
+        train_epoch(epoch, trainloader)

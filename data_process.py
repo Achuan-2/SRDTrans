@@ -203,12 +203,15 @@ def train_preprocess_lessMemoryMulStacks(args):
     ind = 0
     print('\033[1;31mImage list for training -----> \033[0m')
     print('All files are in -----> ', im_folder)
-    stack_num = len(list(os.walk(im_folder, topdown=False))[-1][-1])
+    raw_files = list(os.walk(im_folder, topdown=False))[-1][-1]
+    tif_files = [f for f in raw_files if f.lower().endswith(('.tif', '.tiff'))]
+    tif_files.sort()
+    stack_num = len(tif_files)
     print('Total stack number -----> ', stack_num)
 
     print('Reading files...') 
-    print('\033[1;33mPlease check the shape of these image stacks, since some hyperstacks have unusual shapes. In that case, you just need to re-store these images by ImageJ. \033[0m') 
-    for im_name in list(os.walk(im_folder, topdown=False))[-1][-1]:
+    print('Please check the shape of these image stacks, since some hyperstacks have unusual shapes. In that case, you just need to re-store these images by ImageJ. ') 
+    for im_name in tif_files:
         im_dir = os.path.join(im_folder, im_name)
         noise_im = tiff.imread(im_dir)
         print(im_name, ' -----> the shape is', noise_im.shape)
@@ -332,7 +335,8 @@ def test_preprocess_lessMemoryNoTail_chooseOne (args, N):
     name_list = []
     # train_raw = []
     coordinate_list={}
-    img_list = list(os.walk(im_folder, topdown=False))[-1][-1]
+    raw_img_list = list(os.walk(im_folder, topdown=False))[-1][-1]
+    img_list = [f for f in raw_img_list if f.lower().endswith(('.tif', '.tiff'))]
     img_list.sort()
     # print(img_list)
 

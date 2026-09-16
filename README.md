@@ -1,5 +1,7 @@
 # SRDTrans: Spatial redundancy transformer for self-supervised fluorescence image denoising
 
+> 中文上手指南：[README_zh.md](README_zh.md)
+
 <p align="center">
   <img src="assets/SRDTrans.gif" width='600'>
 </p> 

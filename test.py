@@ -73,7 +73,8 @@ model_list[:-1] = []
 # get stacks for processing
 im_folder = os.path.join(opt.datasets_path, opt.datasets_folder)
 
-img_list = list(os.walk(im_folder, topdown=False))[-1][-1]
+raw_img_list = list(os.walk(im_folder, topdown=False))[-1][-1]
+img_list = [f for f in raw_img_list if f.lower().endswith(('.tif', '.tiff'))]
 img_list.sort()
 
         
