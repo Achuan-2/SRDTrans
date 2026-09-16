@@ -6,6 +6,7 @@ import random
 import math
 import torch
 from torch.utils.data import Dataset
+from movie_io import resolve_input_path, list_movie_files, read_movie
 from skimage import io
 
 
@@ -330,36 +331,18 @@ def test_preprocess_lessMemoryNoTail_chooseOne (args, N):
     cut_s = (patch_t2 - gap_t2)/2
 
     assert cut_w >=0 and cut_h >= 0 and cut_s >= 0, "test cut size is negative!"
-    im_folder = os.path.join(args.datasets_path, args.datasets_folder)
-
     name_list = []
     # train_raw = []
     coordinate_list={}
-    raw_img_list = list(os.walk(im_folder, topdown=False))[-1][-1]
-    img_list = [f for f in raw_img_list if f.lower().endswith(('.tif', '.tiff'))]
-    img_list.sort()
-    # print(img_list)
-
-    im_name = img_list[N]
-
-    im_dir = os.path.join(im_folder, im_name)
-    noise_im = tiff.imread(im_dir)
-
-    # Some exporters store each grayscale frame as a separate TIFF series.
-    # imread defaults to the first series, which is only a 2D frame in that case.
-    if noise_im.ndim == 2:
-        with tiff.TiffFile(im_dir) as tif:
-            if len(tif.pages) > 1 and all(
-                page.shape == noise_im.shape and page.samplesperpixel == 1
-                and page.dtype == noise_im.dtype for page in tif.pages
-            ):
-                noise_im = tif.asarray(key=range(len(tif.pages)))
-
-    if noise_im.ndim != 3:
-        raise ValueError(
-            "Expected a grayscale TIFF stack with shape (T, Y, X), "
-            "but {} has shape {}".format(im_dir, noise_im.shape)
-        )
+    movie_files = getattr(args, 'movie_files', None)
+    if movie_files is None:
+        movie_files = list_movie_files(resolve_input_path(args.datasets_path, args.datasets_folder))
+    im_dir = movie_files[N]
+    im_name = os.path.basename(im_dir)
+    noise_im = read_movie(
+        im_dir, getattr(args, 'h5_dataset', None),
+        getattr(args, 'h5_axis_order', 'tyx'), args.test_datasize
+    )
     
     input_data_type = noise_im.dtype
     img_mean = noise_im.mean()
@@ -376,7 +359,7 @@ def test_preprocess_lessMemoryNoTail_chooseOne (args, N):
 
     if whole_x < patch_x or whole_y < patch_y or whole_t < patch_t2:
         raise ValueError(
-            "TIFF stack {} has shape {}, smaller than patch shape {}".format(
+            "Movie {} has shape {}, smaller than patch shape {}".format(
                 im_dir, noise_im.shape, (patch_t2, patch_y, patch_x)
             )
         )
@@ -465,7 +448,7 @@ def test_preprocess_lessMemoryNoTail_chooseOne (args, N):
                     single_coordinate['patch_end_s'] = patch_t2-cut_s
 
                 # noise_patch1 = noise_im[init_s:end_s,init_h:end_h,init_w:end_w]
-                patch_name = args.datasets_folder+'_x'+str(x)+'_y'+str(y)+'_z'+str(z)
+                patch_name = os.path.splitext(im_name)[0]+'_x'+str(x)+'_y'+str(y)+'_z'+str(z)
                 # train_raw.append(noise_patch1.transpose(1,2,0))
                 name_list.append(patch_name)
                 # print(' single_coordinate -----> ',single_coordinate)

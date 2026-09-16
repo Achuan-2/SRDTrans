@@ -185,6 +185,22 @@ results/
 
 输出会尽量沿用输入数据类型：`uint16` 输入输出为 `uint16`，`int16` 输入输出为 `int16`，其他类型最终保存为 `int32`。
 
+### 直接读取 H5 或外部文件
+
+`test.py` 支持 `.tif`、`.tiff`、`.h5`、`.hdf5`，`--datasets_path` 可直接填写单个文件或图像目录。此时可以省略 `--datasets_folder`；原来的“根目录 + 子文件夹”参数写法也继续支持。`train.py` 仍只支持 TIFF。
+
+H5 输入需要在运行环境安装 `h5py`。本机旧的 Python 3.6 环境可使用 `python -m pip install h5py==3.1.0`；现代 Python 环境可使用 `uv pip install h5py`。
+
+例如，直接处理 CAPilot 导出的 H5：
+
+```powershell
+python test.py --datasets_path "E:\Wokspace\CAPilot workspace\data\3_信号提取\movie_export_f1-1000.h5" --denoise_model "你的模型文件夹名" --GPU 0 --patch_x 64 --patch_t 64
+```
+
+H5 自动优先选择 `/images`、`/data`、`/mov`；没有这些名称时，选择唯一的三维数值数据集。其他情况需通过 `--h5_dataset "/group/movie"` 指定。默认存储顺序为 `(T, Y, X)`，其他顺序可通过 `--h5_axis_order yxt` 等参数指定，读取后统一转换为 `(T, Y, X)`。程序不根据维度大小猜测轴顺序。
+
+`--test_datasize 64` 可限制实际读取的 H5 帧数，必须不少于 `patch_t`。推理仍将选取的图像数据及拼接结果存入内存，并非全程流式处理。输出沿用现有流程，保存为 `*_output.tif`，不会修改源 H5 文件。
+
 ## 6. 使用预训练模型
 
 从原项目 README 的 Model Zoo 下载模型后，整理成下面的结构：

@@ -19,25 +19,31 @@ from SRDTrans import SRDTrans
 from data_process import test_preprocess_lessMemoryNoTail_chooseOne, testset, singlebatch_test_save, multibatch_test_save
 from utils import save_yaml_train
 from sampling import *
+from movie_io import resolve_input_path, list_movie_files
 
 #############################################################################################################################################
 parser = argparse.ArgumentParser()
 parser.add_argument('--GPU', type=str, default='0,1', help="the index of GPU used for computation (e.g., '0', '0,1', '0,1,2')")
 
 parser.add_argument('--denoise_model', type=str, default=None, help='A folder containing models to be tested')
-parser.add_argument('--datasets_folder', type=str, default='train', help="A folder containing all *.tif files for training")
+parser.add_argument('--datasets_folder', type=str, default=None, help="Optional subfolder of datasets_path")
+parser.add_argument('--h5_dataset', type=str, default=None, help="H5 dataset path; auto-select images/data/mov or a unique numeric 3D dataset")
+parser.add_argument('--h5_axis_order', type=str, default='tyx', choices=['tyx', 'txy', 'ytx', 'yxt', 'xty', 'xyt'], help="Stored H5 axes: t=time, y=height, x=width")
 
 parser.add_argument('--patch_x', type=int, default=128, help="patch size in x and y")
 parser.add_argument('--patch_t', type=int, default=128, help="patch size in t")
 parser.add_argument('--overlap_factor', type=float, default=0.5, help="the overlap factor between two adjacent patches")
 
-parser.add_argument('--datasets_path', type=str, default='./datasets', help="dataset root path")
+parser.add_argument('--datasets_path', type=str, default='./datasets', help="TIFF/H5 file or movie directory; defaults to datasets/train")
 parser.add_argument('--pth_path', type=str, default='./pth', help="the root path to save models")
 parser.add_argument('--output_path', type=str, default='./results', help="output directory")
 
 parser.add_argument('--test_datasize', type=int, default=1000000, help='how many slices to be tested')
 parser.add_argument('--scale_factor', type=int, default=1, help='the factor for image intensity scaling')
 opt = parser.parse_args()
+input_path = resolve_input_path(opt.datasets_path, opt.datasets_folder)
+opt.movie_files = list_movie_files(input_path)
+input_label = os.path.splitext(os.path.basename(input_path))[0] if os.path.isfile(input_path) else os.path.basename(os.path.normpath(input_path))
 
 # use isotropic patch size by default
 opt.patch_y = opt.patch_x  # the height of 3D patches (patch size in y)
@@ -71,11 +77,7 @@ model_list.sort()
 model_list[:-1] = []
 
 # get stacks for processing
-im_folder = os.path.join(opt.datasets_path, opt.datasets_folder)
-
-raw_img_list = list(os.walk(im_folder, topdown=False))[-1][-1]
-img_list = [f for f in raw_img_list if f.lower().endswith(('.tif', '.tiff'))]
-img_list.sort()
+img_list = [os.path.basename(path) for path in opt.movie_files]
 
         
 print('\033[1;31mStacks to be processed -----> \033[0m')
@@ -85,7 +87,7 @@ for img in img_list: print(img)
 if not os.path.exists(opt.output_path):
     os.mkdir(opt.output_path)
 current_time = datetime.datetime.now().strftime("%Y%m%d%H%M")
-output_name = 'DataFolderIs_' + opt.datasets_folder + '_' + current_time + '_ModelFolderIs_' + opt.denoise_model
+output_name = 'DataFolderIs_' + input_label + '_' + current_time + '_ModelFolderIs_' + opt.denoise_model
 output_path1 = os.path.join(opt.output_path, output_name)
 
 if not os.path.exists(output_path1):
@@ -149,7 +151,7 @@ def test():
                 prev_time = time.time()
                 time_start = time.time()
                 denoise_img = np.zeros(noise_img.shape)
-                result_file_name = img_list[N].replace('.tif', '') + '_' + pth_name.replace('.pth','') + '_output.tif'
+                result_file_name = os.path.splitext(img_list[N])[0] + '_' + pth_name.replace('.pth','') + '_output.tif'
                 result_name = os.path.join(output_path, result_file_name)
                 print(os.getcwd())
                 print(result_name)

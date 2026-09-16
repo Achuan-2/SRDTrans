@@ -83,6 +83,8 @@ def save_yaml_test(opt, yaml_name):
     para["gap_t"] = opt.gap_t
     para["test_datasize"] = opt.test_datasize
     para["scale_factor"] = opt.scale_factor
+    para["h5_dataset"] = getattr(opt, 'h5_dataset', None)
+    para["h5_axis_order"] = getattr(opt, 'h5_axis_order', 'tyx')
     with open(yaml_name, 'w') as f:
         data = yaml.dump(para, f)
 
